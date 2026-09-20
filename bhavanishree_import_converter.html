@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="ta">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>BHAVANISHREE — Excel to Import File Converter</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: Arial, sans-serif;
+    background: #FBF7F1;
+    color: #2c1810;
+    margin: 0;
+    padding: 24px 16px 60px;
+  }
+  .wrap { max-width: 640px; margin: 0 auto; }
+  h1 {
+    color: #6B1530;
+    font-size: 22px;
+    margin-bottom: 4px;
+  }
+  .sub { color: #7a6a5a; font-size: 14px; margin-bottom: 24px; }
+  .card {
+    background: #fff;
+    border: 1px solid #eee0cf;
+    border-radius: 14px;
+    padding: 20px;
+    margin-bottom: 18px;
+  }
+  .drop {
+    border: 2px dashed #c9a86b;
+    border-radius: 12px;
+    padding: 28px 16px;
+    text-align: center;
+    cursor: pointer;
+    background: #FFF9E6;
+  }
+  .drop:hover { background: #fff3d1; }
+  input[type=file] { display: none; }
+  button {
+    background: #6B1530;
+    color: #fff;
+    border: none;
+    padding: 12px 20px;
+    border-radius: 10px;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    width: 100%;
+  }
+  button:disabled { background: #ccc; cursor: not-allowed; }
+  .log {
+    font-size: 13.5px;
+    line-height: 1.7;
+    background: #f7f2e8;
+    border-radius: 10px;
+    padding: 14px 16px;
+    white-space: pre-wrap;
+    margin-top: 14px;
+  }
+  .err { color: #c94b3c; }
+  .ok { color: #1a7a3c; }
+  .filename { font-weight: 700; color: #6B1530; margin-top: 8px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>📋 Excel → Import கோப்பு மாற்றி</h1>
+  <div class="sub">உங்கள் நிரப்பப்பட்ட Excel கோப்பை இங்கே பதிவேற்றவும். இது BHAVANISHREE ஆப்-ன் "இறக்குமதி" (Import) பட்டனுக்கான .json கோப்பை உருவாக்கும்.</div>
+
+  <div class="card">
+    <div class="drop" id="drop">
+      <div style="font-size:34px;">📤</div>
+      <div style="margin-top:8px; font-weight:700;">Excel கோப்பைத் தேர்ந்தெடுக்க தட்டவும்</div>
+      <div style="font-size:12.5px; color:#8a7a68; margin-top:4px;">(.xlsx)</div>
+      <input type="file" id="file-input" accept=".xlsx,.xls" />
+    </div>
+    <div class="filename" id="filename"></div>
+    <div class="log" id="log" style="display:none;"></div>
+    <div style="margin-top:16px;">
+      <button id="download-btn" disabled>⬇️ Import கோப்பைப் பதிவிறக்கு</button>
+    </div>
+  </div>
+
+  <div class="card" style="font-size:13px; color:#7a6a5a; line-height:1.7;">
+    <b>அடுத்து என்ன செய்வது:</b><br/>
+    1. மேலே பதிவிறக்கம் செய்த .json கோப்பை உங்கள் தொலைபேசியில் வைத்திருங்கள்.<br/>
+    2. BHAVANISHREE ஆப்-ஐ திறந்து, ⚙️ அமைப்புகள் → தரவை இறக்குமதி செய் என்பதற்குச் செல்லவும்.<br/>
+    3. அந்த .json கோப்பை தேர்ந்தெடுத்து உறுதிப்படுத்தவும்.
+  </div>
+</div>
+
+<script>
+const FIELD_COLUMNS = {
+  'kaiUyaram': 4, 'kaiAkkul': 5, 'muzhuUyaram': 6, 'kazhuthu': 7, 'shoulder': 8,
+  'pinKazhuthu': 9, 'munKazhuthu': 10, 'bodyMarbu': 11, 'patti': 12,
+  'openUyaram': 13, 'keezhAkalam': 14, 'armholeDepth': 15, 'kaiSuttalavu': 16
+};
+// Column order matches the template: A=name(0) B=phone(1) C=model(2) D=cuttingType(3)
+// E..Q = measurement fields (indices 4..16), R=notes(17)
+// NOTE: this standalone tool is now optional — BHAVANISHREE has a built-in
+// "Excel / CSV இறக்குமதி" screen under அமைப்புகள் (Settings) that does the
+// same thing directly inside the app, with no separate .json step needed.
+
+function uid() {
+  if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+  return 'id-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+}
+
+function normalizeModel(v) {
+  const s = String(v || '').trim().toLowerCase();
+  if (s.includes('சுடிதார') || s.includes('chudithar') || s.includes('chudidar')) return 'chudithar';
+  if (s.includes('பிளவுஸ') || s.includes('blouse')) return 'blouse';
+  return null;
+}
+function normalizeCutting(v) {
+  const s = String(v || '').trim().toLowerCase();
+  if (s.includes('குறுக்கு') || s.includes('cross')) return 'cross';
+  if (s.includes('நேர்') || s.includes('neer') || s.includes('ner') || s.includes('straight')) return 'neer';
+  return null;
+}
+function isValidNumber(v) {
+  if (v === '' || v == null) return false;
+  return /^\d+(\.\d{1,2})?(\s*-\s*\d+(\.\d{1,2})?)*$/.test(String(v).trim());
+}
+
+const logEl = document.getElementById('log');
+const dlBtn = document.getElementById('download-btn');
+const filenameEl = document.getElementById('filename');
+let generatedPayload = null;
+
+function log(lines) {
+  logEl.style.display = 'block';
+  logEl.innerHTML = lines.join('\n');
+}
+
+document.getElementById('drop').addEventListener('click', () => {
+  document.getElementById('file-input').click();
+});
+
+document.getElementById('file-input').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  filenameEl.textContent = file.name;
+  dlBtn.disabled = true;
+  generatedPayload = null;
+
+  try {
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type: 'array' });
+    const sheetName = wb.SheetNames.find(n => n.indexOf('வாடிக்கை') !== -1) || wb.SheetNames[0];
+    const sheet = wb.Sheets[sheetName];
+    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+
+    // rows[0] = header, rows[1] = example row (skipped), data starts row index 2
+    const customers = [];
+    const measurements = [];
+    const warnings = [];
+    const now = Date.now();
+    let count = 0;
+
+    for (let r = 2; r < rows.length; r++) {
+      const row = rows[r];
+      if (!row || row.every(v => String(v).trim() === '')) continue; // skip blank rows
+
+      const name = String(row[0] || '').trim();
+      const phone = String(row[1] || '').trim();
+      const modelRaw = row[2];
+      const cuttingRaw = row[3];
+      const notes = String(row[17] || '').trim();
+
+      if (!name) { warnings.push(`வரிசை ${r + 1}: பெயர் இல்லை — தவிர்க்கப்பட்டது.`); continue; }
+      const model = normalizeModel(modelRaw);
+      if (!model) { warnings.push(`வரிசை ${r + 1} (${name}): மாடல் தெரியவில்லை ("${modelRaw}") — தவிர்க்கப்பட்டது.`); continue; }
+      const cuttingType = model === 'blouse' ? normalizeCutting(cuttingRaw) : null;
+
+      const custId = uid();
+      const createdAt = now + r; // preserve rough sheet order
+      customers.push({
+        id: custId, name, phone, model, cuttingType,
+        notes, pinned: false, deleted: false,
+        createdAt, updatedAt: createdAt
+      });
+
+      const fields = {};
+      Object.keys(FIELD_COLUMNS).forEach((key) => {
+        const idx = FIELD_COLUMNS[key];
+        const v = String(row[idx] || '').trim();
+        if (v && isValidNumber(v)) fields[key] = v;
+        else if (v) warnings.push(`வரிசை ${r + 1} (${name}): "${key}" மதிப்பு "${v}" சரியில்லை — தவிர்க்கப்பட்டது.`);
+      });
+      if (Object.keys(fields).length > 0) {
+        measurements.push({ id: uid(), customerId: custId, model, fields, createdAt });
+      }
+      count++;
+    }
+
+    generatedPayload = {
+      app: 'bhavanishree-tailoring-shop',
+      version: 2,
+      exportedAt: new Date().toISOString(),
+      data: { customers, measurements, patterns: [] }
+    };
+
+    const lines = [`<span class="ok">✔ ${count} வாடிக்கையாளர்கள் தயார்.</span>`];
+    if (warnings.length) {
+      lines.push('');
+      lines.push(`<span class="err">⚠ ${warnings.length} எச்சரிக்கைகள்:</span>`);
+      warnings.slice(0, 30).forEach(w => lines.push('• ' + w));
+      if (warnings.length > 30) lines.push(`... மேலும் ${warnings.length - 30}`);
+    }
+    log(lines);
+    dlBtn.disabled = count === 0;
+  } catch (err) {
+    console.error(err);
+    log([`<span class="err">கோப்பை படிக்க முடியவில்லை: ${err.message}</span>`]);
+  }
+});
+
+dlBtn.addEventListener('click', () => {
+  if (!generatedPayload) return;
+  const blob = new Blob([JSON.stringify(generatedPayload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const stamp = new Date().toISOString().slice(0, 10);
+  a.href = url;
+  a.download = `bhavanishree-import-${stamp}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+});
+</script>
+</body>
+</html>
