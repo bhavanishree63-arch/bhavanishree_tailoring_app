@@ -226,6 +226,18 @@ const Customers = {
     return throwIfError(res).map(customerFromRow);
   },
 
+  // Count-only query (head: true) — Supabase/PostgREST returns the row
+  // count without sending any actual row data back, so this stays cheap
+  // even as the customer list grows.
+  async countAll() {
+    const sb = getClient();
+    const res = await sb.from(TABLES.customers)
+      .select('*', { count: 'exact', head: true })
+      .eq('deleted', false);
+    if (res.error) throwIfError(res);
+    return res.count || 0;
+  },
+
   async recentList(limit = 8) {
     const sb = getClient();
     const res = await sb.from(TABLES.customers).select('*')
