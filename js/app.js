@@ -612,9 +612,10 @@ async function renderHome() {
   setTopbar({ title: '' });
   document.getElementById('topbar').style.display = 'none';
 
-  const [pinned, recent] = await Promise.all([
+  const [pinned, recent, totalCount] = await Promise.all([
     DB.Customers.pinnedList(),
-    DB.Customers.recentList(10)
+    DB.Customers.recentList(10),
+    DB.Customers.countAll()
   ]);
 
   $view.innerHTML = h`
@@ -622,6 +623,17 @@ async function renderHome() {
       <img class="logo" src="logo.png" alt="BHAVANISHREE TAILORING SHOP" />
       <div class="shop-name">BHAVANISHREE TAILORING SHOP</div>
       <div class="tagline">Stitched with care, style &amp; perfection</div>
+    </div>
+
+    <div class="home-stats">
+      <div class="stat-card" data-nav="/customers">
+        <div class="stat-value">${totalCount}</div>
+        <div class="stat-label">👥 மொத்த வாடிக்கையாளர்கள்</div>
+      </div>
+      <div class="stat-card" data-nav="/customers">
+        <div class="stat-value">${pinned.length}</div>
+        <div class="stat-label">📌 முக்கிய வாடிக்கையாளர்கள்</div>
+      </div>
     </div>
 
     <div class="search-field" id="home-search">
@@ -643,6 +655,9 @@ async function renderHome() {
   `;
 
   document.getElementById('btn-new-customer').onclick = () => navigate('/customers/new');
+  $view.querySelectorAll('.stat-card').forEach((card) => {
+    card.addEventListener('click', () => navigate(card.dataset.nav));
+  });
 
   const pinnedWrap = document.getElementById('pinned-wrap');
   if (pinned.length === 0) {
@@ -725,7 +740,7 @@ function bindCustomerCards(root) {
 
 async function renderCustomerList() {
   document.getElementById('topbar').style.display = 'flex';
-  setTopbar({ title: 'வாடிக்கையாளர்கள்' });
+  setTopbar({ title: 'வாடிக்கையாளர்கள்', showBack: true });
 
   $view.innerHTML = h`
     <div class="search-field" id="list-search">
@@ -780,7 +795,7 @@ function patternCardHtml(p) {
 
 async function renderPatternList() {
   document.getElementById('topbar').style.display = 'flex';
-  setTopbar({ title: 'உடல் அளவு' });
+  setTopbar({ title: 'உடல் அளவு', showBack: true });
 
   const all = await DB.Patterns.getAll();
 
@@ -909,12 +924,10 @@ async function renderPatternForm(patternId) {
       if (isEdit) {
         saved = await DB.Patterns.update(patternId, label, fields);
         toast('பேட்டர்ன் புதுப்பிக்கப்பட்டது');
-        // The edit form was pushed on top of this exact pattern's detail
-        // page, so the entry right below it in history is already
-        // '/measurements/ID'. Popping the '/edit' entry (instead of
-        // replacing it with a second, identical '/measurements/ID' entry)
-        // returns straight to that real entry — avoiding a duplicate that
-        // would make the first back press look like it does nothing.
+        // Same fix as customer edit: pop the '/edit' entry instead of
+        // replacing it with a duplicate of the detail page already sitting
+        // below it in history, which would make the first back press
+        // appear to do nothing.
         history.back();
         return;
       } else {
@@ -1346,7 +1359,7 @@ function showMeasurementDetail(rec) {
 
 async function renderSettings() {
   document.getElementById('topbar').style.display = 'flex';
-  setTopbar({ title: 'அமைப்புகள்' });
+  setTopbar({ title: 'அமைப்புகள்', showBack: true });
 
   $view.innerHTML = h`
     <div class="section-title mt-0">கடை தகவல்</div>
