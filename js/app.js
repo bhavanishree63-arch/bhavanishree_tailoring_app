@@ -909,13 +909,21 @@ async function renderPatternForm(patternId) {
       if (isEdit) {
         saved = await DB.Patterns.update(patternId, label, fields);
         toast('பேட்டர்ன் புதுப்பிக்கப்பட்டது');
+        // The edit form was pushed on top of this exact pattern's detail
+        // page, so the entry right below it in history is already
+        // '/measurements/ID'. Popping the '/edit' entry (instead of
+        // replacing it with a second, identical '/measurements/ID' entry)
+        // returns straight to that real entry — avoiding a duplicate that
+        // would make the first back press look like it does nothing.
+        history.back();
+        return;
       } else {
         saved = await DB.Patterns.add(label, fields);
         toast('பேட்டர்ன் சேமிக்கப்பட்டது');
+        // replace: true so this "new pattern" form doesn't linger in
+        // history — pressing back from the detail page goes to the பேட்டர்ன் list.
+        navigate('/measurements/' + saved.id, { replace: true });
       }
-      // replace: true so this pattern's "new/edit" form doesn't linger in
-      // history — pressing back from the detail page goes to the பேட்டர்ன் list.
-      navigate('/measurements/' + saved.id, { replace: true });
     } catch (err) {
       console.error(err);
       toast('சேமிக்க முடியவில்லை. மீண்டும் முயற்சிக்கவும்.');
