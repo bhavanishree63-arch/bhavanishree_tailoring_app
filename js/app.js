@@ -725,7 +725,7 @@ function bindCustomerCards(root) {
 
 async function renderCustomerList() {
   document.getElementById('topbar').style.display = 'flex';
-  setTopbar({ title: 'வாடிக்கையாளர்கள்', showBack: true });
+  setTopbar({ title: 'வாடிக்கையாளர்கள்' });
 
   $view.innerHTML = h`
     <div class="search-field" id="list-search">
@@ -780,7 +780,7 @@ function patternCardHtml(p) {
 
 async function renderPatternList() {
   document.getElementById('topbar').style.display = 'flex';
-  setTopbar({ title: 'உடல் அளவு', showBack: true });
+  setTopbar({ title: 'உடல் அளவு' });
 
   const all = await DB.Patterns.getAll();
 
@@ -1174,9 +1174,22 @@ async function renderCustomerForm(customerId) {
       }
 
       toast(isEdit ? 'வாடிக்கையாளர் தகவல் புதுப்பிக்கப்பட்டது' : 'வாடிக்கையாளர் சேமிக்கப்பட்டார்');
-      // replace: true so this "new/edit customer" form doesn't linger in
-      // history — pressing back from the profile goes to the customer list.
-      navigate('/customers/' + savedCustomer.id, { replace: true });
+      if (isEdit) {
+        // The edit form was pushed on top of this exact customer's profile
+        // page, so the entry right below it in history is already
+        // '/customers/ID'. Using navigate(replace:true) here would replace
+        // '/edit' with a second, identical '/customers/ID' entry — pressing
+        // back would then have to skip over that duplicate before the hash
+        // actually changes, making the first back press look broken.
+        // Popping the '/edit' entry instead returns straight to the real
+        // profile entry underneath, which the router re-renders with the
+        // fresh data via the hashchange event.
+        history.back();
+      } else {
+        // replace: true so this "new customer" form doesn't linger in
+        // history — pressing back from the profile goes to the customer list.
+        navigate('/customers/' + savedCustomer.id, { replace: true });
+      }
     } catch (err) {
       console.error(err);
       toast('சேமிக்க முடியவில்லை: ' + (err && err.message ? err.message : 'மீண்டும் முயற்சிக்கவும்.'), 6000);
@@ -1325,7 +1338,7 @@ function showMeasurementDetail(rec) {
 
 async function renderSettings() {
   document.getElementById('topbar').style.display = 'flex';
-  setTopbar({ title: 'அமைப்புகள்', showBack: true });
+  setTopbar({ title: 'அமைப்புகள்' });
 
   $view.innerHTML = h`
     <div class="section-title mt-0">கடை தகவல்</div>
