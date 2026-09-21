@@ -1,7 +1,7 @@
 // BHAVANISHREE TAILORING SHOP - Service Worker
 // Caches the app shell so it works fully offline after the first load.
 
-const CACHE_VERSION = 'bhavanishree-v11';
+const CACHE_VERSION = 'bhavanishree-v12';
 const CORE_ASSETS = [
   './',
   './index.html',
@@ -21,12 +21,13 @@ const CORE_ASSETS = [
   './icons/icon-512.png'
 ];
 
-// Files that change whenever we ship a fix — these must always be fetched
-// from the network first, so a bug fix takes effect the moment the app is
-// reopened instead of waiting on the person to notice and force-clear the
-// cache. If the network is unreachable (offline), we fall back to whatever
-// was last cached so the app still opens.
-const NETWORK_FIRST = [
+// Files that change whenever we ship a fix. These use "stale-while-
+// revalidate": the cached copy is served instantly (so the app opens fast,
+// no waiting on the network), while a fresh copy is fetched in the
+// background and saved for the *next* load. So a fix you ship shows up
+// automatically the next time the app is reopened, without you needing to
+// bump a cache version, and without slowing down every single load.
+const STALE_WHILE_REVALIDATE = [
   './',
   './index.html',
   './css/style.css',
@@ -34,8 +35,8 @@ const NETWORK_FIRST = [
   './js/app.js'
 ];
 
-function isNetworkFirst(url) {
-  return NETWORK_FIRST.some((suffix) => url.pathname.endsWith(suffix.replace('./', '/')));
+function isStaleWhileRevalidate(url) {
+  return STALE_WHILE_REVALIDATE.some((suffix) => url.pathname.endsWith(suffix.replace('./', '/')));
 }
 
 self.addEventListener('install', (event) => {
@@ -57,24 +58,30 @@ self.addEventListener('fetch', (event) => {
   if (request.method !== 'GET') return;
 
   const url = new URL(request.url);
-  const networkFirst = request.mode === 'navigate' || isNetworkFirst(url);
+  const swr = request.mode === 'navigate' || isStaleWhileRevalidate(url);
 
-  if (networkFirst) {
-    // Always try the network first for the app's own code, so edits you
-    // ship are picked up on the very next load. Only fall back to the
-    // cached copy if there's no connectivity.
+  if (swr) {
     event.respondWith(
-      fetch(request)
-        .then((response) => {
-          if (response && response.status === 200 && response.type === 'basic') {
-            const clone = response.clone();
-            caches.open(CACHE_VERSION).then((cache) => cache.put(request, clone));
-          }
-          return response;
-        })
-        .catch(() =>
-          caches.match(request).then((cached) => cached || caches.match('./index.html'))
-        )
+      caches.open(CACHE_VERSION).then(async (cache) => {
+        const cached = await cache.match(request);
+
+        // Kick off a network fetch regardless, to refresh the cache for
+        // next time. Don't let the page wait on it.
+        const networkFetch = fetch(request)
+          .then((response) => {
+            if (response && response.status === 200 && response.type === 'basic') {
+              cache.put(request, response.clone());
+            }
+            return response;
+          })
+          .catch(() => null);
+
+        // Serve the cached copy immediately if we have one (fast). If
+        // nothing is cached yet (first-ever load), wait on the network.
+        if (cached) return cached;
+        const fresh = await networkFetch;
+        return fresh || cache.match('./index.html');
+      })
     );
     return;
   }
